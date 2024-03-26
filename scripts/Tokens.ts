@@ -4,6 +4,7 @@ import { parseEther, formatEther } from "viem";
 async function main() {
   const publicClient = await viem.getPublicClient();
   const [deployer, account1, account2] = await viem.getWalletClients();
+
   // TODO
   const tokenContract = await viem.deployContract("MyToken");
   console.log(`Contract deployed at ${tokenContract.address}`);
