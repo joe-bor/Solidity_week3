@@ -5,12 +5,8 @@ async function main() {
   const publicClient = await viem.getPublicClient();
   const [deployer, account1, account2] = await viem.getWalletClients();
 
-  // TODO
   const tokenContract = await viem.deployContract("MyToken");
   console.log(`Contract deployed at ${tokenContract.address}`);
-
-  //   const totalSupply = await tokenContract.read.totalSupply();
-  //   console.log({ totalSupply });
 
   // Fetching the role code
   const code = await tokenContract.read.MINTER_ROLE();
@@ -43,10 +39,12 @@ async function main() {
     parseEther("2"),
   ]);
   await publicClient.waitForTransactionReceipt({ hash: tx });
+
   const myBalance = await tokenContract.read.balanceOf([
     deployer.account.address,
   ]);
   console.log(`My Balance is ${formatEther(myBalance)} ${symbol}`);
+
   const otherBalance = await tokenContract.read.balanceOf([
     account1.account.address,
   ]);

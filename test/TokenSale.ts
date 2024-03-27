@@ -1,16 +1,57 @@
 import { expect } from "chai";
 import { viem } from "hardhat";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+
+const TEST_RATIO = 10n;
+const TEST_PRICE = 5n;
+
+async function fixture() {
+  const tokenSaleContract = await viem.deployContract("TokenSale", [
+    TEST_RATIO,
+    TEST_PRICE,
+    "0x0000000000000000000000000000000000000000",
+    "0x0000000000000000000000000000000000000000",
+  ]);
+
+  return { tokenSaleContract };
+}
 
 describe("NFT Shop", async () => {
   describe("When the Shop contract is deployed", async () => {
     it("defines the ratio as provided in parameters", async () => {
-      throw new Error("Not implemented");
+      const { tokenSaleContract } = await loadFixture(fixture);
+      const ratio = await tokenSaleContract.read.ratio();
+      expect(ratio).to.eq(TEST_RATIO);
     });
     it("defines the price as provided in parameters", async () => {
-      throw new Error("Not implemented");
+      const { tokenSaleContract } = await loadFixture(fixture);
+      const price = await tokenSaleContract.read.price();
+      expect(price).to.eq(TEST_PRICE);
     });
     it("uses a valid ERC20 as payment token", async () => {
-      throw new Error("Not implemented");
+      const { tokenSaleContract } = await loadFixture(fixture);
+      const paymentTokenAddress = await tokenSaleContract.read.paymentToken();
+      // how do i verify this address is of type ERC20?
+      // should i first deploy it, then grab its address => use it for tokenSale's contructor?
+
+      const paymentTokenContract = await viem.getContractAt(
+        "ERC20",
+        paymentTokenAddress
+      );
+
+      try {
+        const totalSupply = await paymentTokenContract.read.totalSupply();
+        // If the call succeeds, assert something about totalSupply (e.g., it's a non-zero value)
+        expect(totalSupply).to.be.eq(
+          0n,
+          "The totalSupply should be positive, indicating a valid ERC20 token."
+        );
+      } catch (error) {
+        // If the call fails, the contract might not be ERC20 or the function call was incorrect
+        expect.fail(
+          "The contract at the given address does not support the ERC20 interface."
+        );
+      }
     });
     it("uses a valid ERC721 as NFT collection", async () => {
       throw new Error("Not implemented");
