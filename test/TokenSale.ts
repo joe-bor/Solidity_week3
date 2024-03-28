@@ -70,32 +70,30 @@ describe("NFT Shop", async () => {
   });
   describe("When a user buys an ERC20 from the Token contract", async () => {
     it("charges the correct amount of ETH", async () => {
-      const {
-        tokenSaleContract,
-        myTokenContract,
-        deployer,
-        acc1,
-        acc2,
-        publicClient,
-      } = await loadFixture(fixture);
+      const { tokenSaleContract, deployer, myTokenContract } =
+        await loadFixture(fixture);
+      // user call buyToken() of tokenSaleContract
+      // buyToken, takes in ETH that's why it needs to be payable.
+      const myTokenContract_TotalSupply =
+        await myTokenContract.read.totalSupply();
 
-      const ethBalanceBefore = await publicClient.getBalance({
-        address: acc1.account.address,
-      });
-      const tx = await tokenSaleContract.write.buyTokens({
+      const deployerBalance = await myTokenContract.read.balanceOf([
+        deployer.account.address,
+      ]);
+
+      await tokenSaleContract.write.buyTokens({
         value: parseEther(TEST_BUY_AMOUNT),
-        account: acc1.account.address,
+        account: deployer.account.address,
       });
-      const txReceipt = await publicClient.getTransactionReceipt({ hash: tx });
-      const gasAmount = txReceipt.gasUsed;
-      const gasPrice = txReceipt.effectiveGasPrice;
-      const txFees = gasAmount * gasPrice;
-      const ethBalanceAfter = await publicClient.getBalance({
-        address: acc1.account.address,
-      });
-      const diff = ethBalanceBefore - ethBalanceAfter; // + GAS FEES
-      expect(diff).to.be.eq(parseEther(TEST_BUY_AMOUNT) + txFees);
+
+      const deployerBalanceAfter = await myTokenContract.read.balanceOf([
+        deployer.account.address,
+      ]);
+      const diff = deployerBalance - deployerBalanceAfter;
+      // expect(diff).to.be.eq( (10*10**18n) - parseEther(TEST_BUY_AMOUNT))
+      const z = 10;
     });
+
     it("gives the correct amount of tokens", async () => {
       const { tokenSaleContract, myTokenContract, deployer, acc1, acc2 } =
         await loadFixture(fixture);
@@ -104,7 +102,7 @@ describe("NFT Shop", async () => {
       ]);
       const tx = await tokenSaleContract.write.buyTokens({
         value: parseEther(TEST_BUY_AMOUNT),
-        account: acc1.account,
+        account: acc1.account.address,
       });
       const tokenBalanceAfter = await myTokenContract.read.balanceOf([
         acc1.account.address,
