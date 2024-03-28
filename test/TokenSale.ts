@@ -1,19 +1,41 @@
 import { expect } from "chai";
 import { viem } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { parseEther, formatEther } from "viem";
 
 const TEST_RATIO = 10n;
 const TEST_PRICE = 5n;
+const TEST_BUY_AMOUNT = "10";
 
 async function fixture() {
+  const publicClient = await viem.getPublicClient();
+  const myTokenContract = await viem.deployContract("MyToken", []);
+  const myNftContract = await viem.deployContract("MyNFT", []);
   const tokenSaleContract = await viem.deployContract("TokenSale", [
     TEST_RATIO,
     TEST_PRICE,
-    "0x0000000000000000000000000000000000000000",
-    "0x0000000000000000000000000000000000000000",
+    myTokenContract.address,
+    myNftContract.address,
   ]);
 
-  return { tokenSaleContract };
+  // Grant minter-role to instance of TokenSale Contract! NOT the deployer
+  const minterRole = await myTokenContract.read.MINTER_ROLE();
+  await myTokenContract.write.grantRole([
+    minterRole,
+    tokenSaleContract.address,
+  ]);
+
+  const [deployer, acc1, acc2] = await viem.getWalletClients();
+
+  return {
+    publicClient,
+    myTokenContract,
+    myNftContract,
+    tokenSaleContract,
+    deployer,
+    acc1,
+    acc2,
+  };
 }
 
 describe("NFT Shop", async () => {
@@ -31,38 +53,64 @@ describe("NFT Shop", async () => {
     it("uses a valid ERC20 as payment token", async () => {
       const { tokenSaleContract } = await loadFixture(fixture);
       const paymentTokenAddress = await tokenSaleContract.read.paymentToken();
-      // how do i verify this address is of type ERC20?
-      // should i first deploy it, then grab its address => use it for tokenSale's contructor?
 
       const paymentTokenContract = await viem.getContractAt(
         "ERC20",
         paymentTokenAddress
       );
-
-      try {
-        const totalSupply = await paymentTokenContract.read.totalSupply();
-        // If the call succeeds, assert something about totalSupply (e.g., it's a non-zero value)
-        expect(totalSupply).to.be.eq(
-          0n,
-          "The totalSupply should be positive, indicating a valid ERC20 token."
-        );
-      } catch (error) {
-        // If the call fails, the contract might not be ERC20 or the function call was incorrect
-        expect.fail(
-          "The contract at the given address does not support the ERC20 interface."
-        );
-      }
+      // An ERC20 token should have a property _totalSupply, regardless of the value this should go through
+      await expect(paymentTokenContract.read.totalSupply()).to.be.not.rejected;
     });
     it("uses a valid ERC721 as NFT collection", async () => {
-      throw new Error("Not implemented");
+      const { tokenSaleContract, myNftContract } = await loadFixture(fixture);
+      await expect(myNftContract.read.name()).to.be.not.rejected;
+      await expect(myNftContract.read.balanceOf([myNftContract.address])).to.be
+        .not.rejected;
     });
   });
   describe("When a user buys an ERC20 from the Token contract", async () => {
     it("charges the correct amount of ETH", async () => {
-      throw new Error("Not implemented");
+      const {
+        tokenSaleContract,
+        myTokenContract,
+        deployer,
+        acc1,
+        acc2,
+        publicClient,
+      } = await loadFixture(fixture);
+
+      const ethBalanceBefore = await publicClient.getBalance({
+        address: acc1.account.address,
+      });
+      const tx = await tokenSaleContract.write.buyTokens({
+        value: parseEther(TEST_BUY_AMOUNT),
+        account: acc1.account.address,
+      });
+      const txReceipt = await publicClient.getTransactionReceipt({ hash: tx });
+      const gasAmount = txReceipt.gasUsed;
+      const gasPrice = txReceipt.effectiveGasPrice;
+      const txFees = gasAmount * gasPrice;
+      const ethBalanceAfter = await publicClient.getBalance({
+        address: acc1.account.address,
+      });
+      const diff = ethBalanceBefore - ethBalanceAfter; // + GAS FEES
+      expect(diff).to.be.eq(parseEther(TEST_BUY_AMOUNT) + txFees);
     });
     it("gives the correct amount of tokens", async () => {
-      throw new Error("Not implemented");
+      const { tokenSaleContract, myTokenContract, deployer, acc1, acc2 } =
+        await loadFixture(fixture);
+      const tokenBalanceBefore = await myTokenContract.read.balanceOf([
+        acc1.account.address,
+      ]);
+      const tx = await tokenSaleContract.write.buyTokens({
+        value: parseEther(TEST_BUY_AMOUNT),
+        account: acc1.account,
+      });
+      const tokenBalanceAfter = await myTokenContract.read.balanceOf([
+        acc1.account.address,
+      ]);
+      const diff = tokenBalanceAfter - tokenBalanceBefore;
+      expect(diff).to.be.eq(parseEther(TEST_BUY_AMOUNT) * TEST_RATIO);
     });
   });
   describe("When a user burns an ERC20 at the Shop contract", async () => {
@@ -70,6 +118,9 @@ describe("NFT Shop", async () => {
       throw new Error("Not implemented");
     });
     it("burns the correct amount of tokens", async () => {
+      // call the tokencontract to approve amount to the token sale contract
+      // call the tokensalecontract for return tokens function
+      // check the token balance of the user
       throw new Error("Not implemented");
     });
   });
