@@ -70,36 +70,51 @@ describe("NFT Shop", async () => {
   });
   describe("When a user buys an ERC20 from the Token contract", async () => {
     it("charges the correct amount of ETH", async () => {
-      const { tokenSaleContract, deployer, myTokenContract } =
-        await loadFixture(fixture);
-      // user call buyToken() of tokenSaleContract
+      const { tokenSaleContract, deployer, publicClient } = await loadFixture(
+        fixture
+      );
+
+      // Initial balance of the deployer: pre-funded account
+      const deployerBalance = await publicClient.getBalance({
+        address: deployer.account.address,
+      });
+
+      // deployer call buyToken() of tokenSaleContract
       // buyToken, takes in ETH that's why it needs to be payable.
-      const myTokenContract_TotalSupply =
-        await myTokenContract.read.totalSupply();
-
-      const deployerBalance = await myTokenContract.read.balanceOf([
-        deployer.account.address,
-      ]);
-
-      await tokenSaleContract.write.buyTokens({
+      const tx_hash = await tokenSaleContract.write.buyTokens({
         value: parseEther(TEST_BUY_AMOUNT),
         account: deployer.account.address,
       });
 
-      const deployerBalanceAfter = await myTokenContract.read.balanceOf([
-        deployer.account.address,
-      ]);
+      // Wait for the tx to get confirmed
+      const tx_receipt = await publicClient.getTransactionReceipt({
+        hash: tx_hash,
+      });
+      // calculate tx fees
+      const gasAmount = tx_receipt.gasUsed;
+      const gasPrice = tx_receipt.effectiveGasPrice;
+      const txFees = gasAmount * gasPrice;
+
+      const deployerBalanceAfter = await publicClient.getBalance({
+        address: deployer.account.address,
+      });
+
+      // the difference should be: the initial amount - (amount bought + tx fees)
       const diff = deployerBalance - deployerBalanceAfter;
-      // expect(diff).to.be.eq( (10*10**18n) - parseEther(TEST_BUY_AMOUNT))
-      const z = 10;
+      const expected_diff = parseEther(TEST_BUY_AMOUNT) + txFees;
+      expect(diff).to.be.eq(expected_diff);
     });
 
     it("gives the correct amount of tokens", async () => {
       const { tokenSaleContract, myTokenContract, deployer, acc1, acc2 } =
         await loadFixture(fixture);
+
+      // Initial _balance[address] of acc 1 should be 0
       const tokenBalanceBefore = await myTokenContract.read.balanceOf([
         acc1.account.address,
       ]);
+
+      // acc 1 buys tokens
       const tx = await tokenSaleContract.write.buyTokens({
         value: parseEther(TEST_BUY_AMOUNT),
         account: acc1.account.address,
@@ -113,13 +128,66 @@ describe("NFT Shop", async () => {
   });
   describe("When a user burns an ERC20 at the Shop contract", async () => {
     it("gives the correct amount of ETH", async () => {
+      // First I'll need to buy an ERC20 token
+      // Then I'll burn it by sending to address 0
+      // I should get the ETH back
+      // check initial bal, bal after buying, bal after
+      const { publicClient } = await loadFixture(fixture);
+
       throw new Error("Not implemented");
     });
     it("burns the correct amount of tokens", async () => {
       // call the tokencontract to approve amount to the token sale contract
       // call the tokensalecontract for return tokens function
       // check the token balance of the user
-      throw new Error("Not implemented");
+      const { myTokenContract, tokenSaleContract, deployer, publicClient } =
+        await loadFixture(fixture);
+
+      // this should be the default of 0
+      const allowance = await myTokenContract.read.allowance([
+        deployer.account.address, //owner
+        tokenSaleContract.address, //spender
+      ]);
+
+      const hash = await myTokenContract.write.approve([
+        tokenSaleContract.address,
+        100n,
+      ]);
+
+      // This should return _allowance[deployer][contract]: how much it can spend using deployer's money?
+      const allowance2 = await myTokenContract.read.allowance([
+        deployer.account.address,
+        tokenSaleContract.address,
+      ]);
+
+      // Deployer should default to 0 balance
+      const deployer_balance = await myTokenContract.read.balanceOf([
+        deployer.account.address,
+      ]);
+
+      // need to mint() to increase balance?
+      // buyTokens() increases the balance of the caller AND totalSupply of the tokenContract
+      await tokenSaleContract.write.buyTokens({ value: 10n });
+      const deployer_balance2 = await myTokenContract.read.balanceOf([
+        deployer.account.address,
+      ]);
+
+      // Now that we have bought tokens, let's burn them!
+      const hash2 = await tokenSaleContract.write.returnTokens([1n]);
+      const receipt = await publicClient.getTransactionReceipt({ hash: hash2 });
+
+      // Need to account for gas
+      const gasAmount = receipt.gasUsed;
+      const gasPrice = receipt.effectiveGasPrice;
+      const txFees = gasAmount * gasPrice;
+
+      const deployer_balance3 = await myTokenContract.read.balanceOf([
+        deployer.account.address,
+      ]);
+
+      // buyTokens() w/ value 10n => totalSupply: 100n
+      // returnTokens([1n]) => totalSupply: 99n
+      expect(await myTokenContract.read.totalSupply()).to.eq(99n);
     });
   });
   describe("When a user buys an NFT from the Shop contract", async () => {
